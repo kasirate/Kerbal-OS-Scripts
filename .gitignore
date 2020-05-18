@@ -1,0 +1,23 @@
+./*
+./boot/*
+./.vscode/*
+./loaders/*
+
+
+
+# MS Office temporary
+~$*.doc
+~$*.docx
+~$*.docm
+~$*.dot
+~$*.dotm
+~$*.xls
+~$*.xlsx
+~$*.xlsm
+~$*.xlt
+~$*.xltx
+*.xlk
+~$*.ppt
+~$*.pptx
+*.~vsd
+*.~vsdx
