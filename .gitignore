@@ -1,7 +1,15 @@
-./*
-./boot/*
-./.vscode/*
-./loaders/*
+# Ignore personal scripts/misc. files in root kOS directory
+/*.*
+
+#ignore boot scripts
+boot/*
+boot
+loaders/*
+loaders
+
+#ignore VS Code files
+.vscode/*
+.vscode
 
 
 
