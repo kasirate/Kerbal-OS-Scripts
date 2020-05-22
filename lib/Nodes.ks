@@ -229,7 +229,7 @@ function IdealVelocityAtTimeForSYIE
             positionAt(obj, epoch) - positionAt(BodyAt(epoch, obj), epoch)
         if not (BodyAt(epoch, obj):name = ship:orbit:body:name) else
             positionAt(obj, epoch) - ship:body:position.
-    log "posatepoch:mag = " + posatepoch:mag to "0:/debug.txt".
+    log "posatepoch:mag = " + posatepoch:mag to "1:/debug.txt".
     if (posatepoch:mag > 2*y) and (y > 0)
     {
         WarningMessage(
@@ -240,9 +240,9 @@ function IdealVelocityAtTimeForSYIE
         return ans.
     }
 
-    //log "BodyAt(epoch, obj) <" + BodyAt(epoch, obj):typename +"> = " + BodyAt(epoch, obj):tostring to "0:/debug.txt".
+    //log "BodyAt(epoch, obj) <" + BodyAt(epoch, obj):typename +"> = " + BodyAt(epoch, obj):tostring to "1:/debug.txt".
     local bod is BodyAt(epoch, obj).
-    //log "bod <" + bod:typename +"> = " + bod:tostring to "0:/debug.txt".
+    //log "bod <" + bod:typename +"> = " + bod:tostring to "1:/debug.txt".
     local mu is bod:mu.
     local minecc is abs(y-posatepoch:mag)/(y). // iffy
     set e to max(e, minecc).
@@ -271,13 +271,13 @@ function IdealVelocityAtTimeForSYIE
 
     set ans to ((uNorth*idealSpeed)*dirFltAng)*dirHdg.
 
-    log "i = " + i to "0:/debug.txt".
-    log "e = " + e to "0:/debug.txt".
+    log "i = " + i to "1:/debug.txt".
+    log "e = " + e to "1:/debug.txt".
 
-    log "Ideal Speed: " + idealSpeed to "0:/debug.txt".
-    log "Ideal Flight Angle: " + idealFltAng to "0:/debug.txt".
-    log "Ideal Hdg: " + idealHdg to "0:/debug.txt".
-    log "Ideal Velocity: " + ans to "0:/debug.txt".
+    log "Ideal Speed: " + idealSpeed to "1:/debug.txt".
+    log "Ideal Flight Angle: " + idealFltAng to "1:/debug.txt".
+    log "Ideal Hdg: " + idealHdg to "1:/debug.txt".
+    log "Ideal Velocity: " + ans to "1:/debug.txt".
 
     return ans.
 }
