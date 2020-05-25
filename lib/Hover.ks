@@ -23,6 +23,7 @@ local bnd is ship:bounds.
 local last_bnd_update is time:seconds.
 local hNull is false.
 local isPositionMode is false.
+local PositionDistance is 0.
 local TerrainMode is true.
 
 local PositionArrowColor is red.
@@ -212,6 +213,7 @@ local function Hover_CtrlHSpeed
         until false.
     }
     set hSpeed to min(hSpeedLimit, dist/20).
+    set PositionDistance to dist.
     if dist > 1
     {
         set PositionArrowColor to Red.
@@ -270,7 +272,7 @@ local function Hover_CtrlPitch
     local truehdg is vectorExclude(pos:normalized,ThrustVec):normalized.
     local vecHDG is uNorth * angleAxis(hdg, pos:normalized).
     local hvel is vectorExclude(pos:normalized, ship:velocity:surface).
-    if (isLanding and (hvel:mag < 0.1))
+    if (isLanding and (hvel:mag < 0.1) and ((not isPositionMode) or (PositionDistance < 1)))
     {
         if not hNull
         {
