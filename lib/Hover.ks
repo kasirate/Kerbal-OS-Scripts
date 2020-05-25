@@ -492,6 +492,11 @@ local function Hover_ProcessInput
         }
         set HoverAltitude to HoverAltitude + 1.
     }
+    if c = "p"
+    {
+        print "Activating Position Mode...".
+        Hover_Set_Position(ship:geoPosition:lat, ship:geoPosition:lng).
+    }
     if c = "g"
     {
         print "Landing".
