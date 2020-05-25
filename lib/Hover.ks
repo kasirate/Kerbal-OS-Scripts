@@ -16,8 +16,6 @@ local TouchDownSpeed is -0.5.
 
 local currentVAcc is 0.
 local currentHAcc is 0.
-local checkLanded is false.
-local LandedCheck_starttime is 0.
 local hasLanded is false.
 local bnd is ship:bounds.
 local last_bnd_update is time:seconds.
@@ -62,7 +60,6 @@ if exists("ProgramLoader")
 
 local function main 
 {
-    //parameter isLoose is true, ThrustDir is angleAxis(0, ship:up:vector).
     if ThrustDir:istype("Boolean")
     {
         set ThrustDir to angleAxis(0, ship:up:vector).
@@ -90,8 +87,6 @@ local function main
             "AGL"
         if TerrainMode else
             "ASL".
-    //Hover_Set_Position().
-    //set HoverAltitude to HoverAltitude + 50.
     print "Initializing Altitude hold at " + round(HoverAltitude) + "m " + sAltMode.
     print "   Position Mode: " + isPositionMode.
     set hasLanded to false.
@@ -208,14 +203,6 @@ local function Hover_CtrlHSpeed
             360 - vAng(uNorth, pathVec).
     local dist is vAng(startVec, tgt)*constant:DegToRad*startVec:mag.
     set hMaxA to max (0, hMaxA).
-    if 2*hMaxA*dist < 0
-    {
-        print "    2*hMaxA*dist = " + 2*hMaxA*dist.
-        print "        hMaxA = " + hMaxA.
-        print "        dist = " + dist.
-        until false.
-    }
-    // set hSpeed to min(hSpeedLimit, dist/5).
     set pidPosition:maxoutput to ABS(hSpeedLimit).
     set pidPosition:minoutput to -ABS(hSpeedLimit).
     set hSpeed to -pidPosition:update(time:seconds, dist).
@@ -285,12 +272,6 @@ local function Hover_CtrlPitch
             print "Beginning Final descent...".
             set HoverAltitude to MIN(bnd:bottomaltradar - 2, 5).
         }
-        // set hSpeed to hvel:mag.
-        // set hdg to
-        //     choose
-        //         vAng(uNorth, -hvel:normalized)
-        //     if hvel:normalized * uEast >= 0 else
-        //         360 - vAng(uNorth, -hvel:normalized).
         set hNull to true.
     }
     else
@@ -304,10 +285,6 @@ local function Hover_CtrlPitch
             (-0.2 + gAcc)*sin(maxAng).
     local hdv is vecHdg * hSpeed - hvel.
     local hacc is hMaxA.
-    // if hdv:mag < (hMaxA * 10)/2 // 10s ramp down
-    // {
-    //     set hacc to hMaxA * hdv:mag*((2)/(hMaxA * 10)).
-    // }
     set pidHVel:maxoutput to ABS(hMaxA).
     set pidHVel:minoutput to -ABS(hMaxA).
     set hacc to hMaxA * -pidHVel:Update(time:seconds, hdv:mag/hMaxA).
@@ -318,7 +295,7 @@ local function Hover_CtrlPitch
     }
     else
     {
-        set pitchAng to 0.//arcSin(min(sin(maxAng), hacc/(aUp))).
+        set pitchAng to 0.
         set hacc to 0.
     }
     local pitchVec is pos:normalized * angleAxis(pitchAng, vCrs(pos:normalized, hdv:normalized)).
@@ -374,7 +351,6 @@ local function Hover_CtrlThrust
         }
         else
         {
-            //if update print "Hovering near target Altitude...".
         }
         set vAcc to (vSpeedTarget - (vSpeed))/1.5.
 
@@ -393,7 +369,6 @@ local function Hover_CtrlThrust
         {
             set state to "Slow Ascent".
             set vAcc to -((ABS(vSpeed)-1)^2)/(2*(bnd:bottomaltradar - HoverAltitude - 2)).
-            // if update print "Slowing ascent at " + vSpeed + "m/s (" + vAcc + "m/s^2)...".
         }
         else
         {
@@ -403,7 +378,6 @@ local function Hover_CtrlThrust
                     min(aUp, (vSpeedLimit[1] - vSpeed)/2)
                 if not (vSpeedLimit[1] = 0) else
                     aUp.
-            // if update print "Max ascent at " + vSpeed + "m/s (" + vAcc + "m/s^2)...".
         }
     }
     else if bnd:bottomaltradar > HoverAltitude
@@ -412,7 +386,6 @@ local function Hover_CtrlThrust
         {
             set state to "Slow Descent".
             set vAcc to ((ABS(vSpeed)-1)^2)/(2*(bnd:bottomaltradar - HoverAltitude + 2)).
-            // if update print "Slowing descent at " + vSpeed + "m/s (" + vAcc + "m/s^2)...".
         }
         else
         {
@@ -422,7 +395,6 @@ local function Hover_CtrlThrust
                     MAX(aDown, ((vSpeedLimit[0] - vSpeed))/1.5)
                 if not (vSpeedLimit[0] = 0) else
                     aDown.
-            // if update print "Max descent at " + vSpeed + "m/s (" + vAcc + "m/s^2)...".
         }
     }
     if ((currentHAcc > 0.1) or (ThrustAng > 0.1)) and vAcc <= -(gForce/ship:mass)
@@ -432,16 +404,10 @@ local function Hover_CtrlThrust
     }
     set vAcc to min(aUp, max(aDown, vAcc)).
     local myThrust is (gForce + (vAcc*ship:mass))/cos(ThrustAng).
-    // if ((myThrust = 0) and (currentHAcc > 0) and ((ThrustVec:normalized * pos:normalized) < 0.1))
-    // {
-    //     set myThrust to currentHAcc * ship:mass.
-    //     set state to state + "| hVel Assist".
-    // }
     lock throttle to myThrust/ship:availablethrust.
     set currentVAcc to vAcc.
     if myThrust/ship:availablethrust > 0.5
     {
-        print "Thrust of " + round((myThrust/ship:availablethrust)*100, 1) + "% " +
         "(VertA:" + round(vAcc,1) + "m/s2@" + round(ThrustAng) + "*, HA:" + round(HoverAltitude) + ") " +
         "in state: " + state.
     }
@@ -523,20 +489,18 @@ if (defined ProgramLoaderReady)
 {
     if isLoading()
     {
-        //print "Loading program...".
         set doProgram to false.
     }
 }
 else
 {
-    //print "Variable" + char(32) + "ProgramLoaderReady" + char(32) + " not found...".
+    
 }
 if doProgram
 {
-    //print "Executing program...".
     main().
 }
 else
 {
-    print "Program Loaded.".
+    
 }
