@@ -271,7 +271,7 @@ function doCircularize
     Banner("Executing Circularization").
 
     local mnv is CreateCircularizeNode("apoapsis", Inclination).
-    ExecuteNode(mnv).
+    ExecuteNode(mnv, true, true, true).
 }
 
 local doProgram is true.
