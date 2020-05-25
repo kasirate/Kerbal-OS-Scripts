@@ -25,6 +25,8 @@ local hNull is false.
 local isPositionMode is false.
 local TerrainMode is true.
 
+local pidHVel is PIDLoop(0.5, 0.001, 0).
+
 local PositionArrowColor is red.
 local PositionArrow is 
     VECDRAW(
@@ -296,14 +298,17 @@ local function Hover_CtrlPitch
             (-0.2 + gAcc)*sin(maxAng).
     local hdv is vecHdg * hSpeed - hvel.
     local hacc is hMaxA.
-    if hdv:mag < (hMaxA * 10)/2 // 10s ramp down
-    {
-        set hacc to hMaxA * hdv:mag*((2)/(hMaxA * 10)).
-    }
+    // if hdv:mag < (hMaxA * 10)/2 // 10s ramp down
+    // {
+    //     set hacc to hMaxA * hdv:mag*((2)/(hMaxA * 10)).
+    // }
+    set pidHVel:maxoutput to hMaxA.
+    set pidHVel:minoutput to -hMaxA.
+    set hacc to hMaxA * -pidHVel:Update(time:seconds, hdv:mag/hMaxA).
     local pitchAng is 0.
     if not ((currentVAcc + gAcc < 0.1) or (hNull))
     {
-        set pitchAng to arcSin(min(sin(maxAng), hacc/(currentVAcc + gAcc))).
+        set pitchAng to arcSin(max(-sin(maxAng), min(sin(maxAng), hacc/(currentVAcc + gAcc)))).
     }
     else
     {
