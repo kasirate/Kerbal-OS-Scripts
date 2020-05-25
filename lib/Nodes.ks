@@ -673,7 +673,7 @@ function ObtHeadingFromLatIncl
     }
     else if i > 90
     {
-        local i2 is 20 - i.
+        local i2 is 180 - i.
         set ans to 270 + arcTan(sqrt((sin(i2)^2) - ((sin(lat)^2)))/cos(i2)).
     }
     if southerly
