@@ -2,7 +2,8 @@
 
 parameter 
     ThrustDir is angleAxis(0, ship:up:vector), 
-    HoverAltitude is ship:bounds:bottomaltradar.
+    HoverAltitude is max(ship:bounds:bottomaltradar, 50),
+    HoverPosition is false.
 
 local vSpeedLimit is list(0,0).
 local aLimit is list(0,0).
@@ -21,6 +22,27 @@ local hasLanded is false.
 local bnd is ship:bounds.
 local last_bnd_update is time:seconds.
 local hNull is false.
+local isPositionMode is false.
+local TerrainMode is true.
+
+local PositionArrowColor is red.
+local PositionArrow is 
+    VECDRAW(
+        ship:position, 
+        {
+            return 
+                choose
+                    HoverPosition:position
+                if HoverPosition:isType("GeoCoordinates") and isPositionMode else
+                    ship:position.
+        }, 
+        {return PositionArrowColor.}, 
+        "", 
+        1.0, 
+        false, 
+        0.2, 
+        true
+    ).
 
 local update is false.
 
@@ -37,7 +59,37 @@ if exists("ProgramLoader")
 local function main 
 {
     //parameter isLoose is true, ThrustDir is angleAxis(0, ship:up:vector).
-    print "Initializing Altitude hold at " + round(HoverAltitude) + "m".
+    if ThrustDir:istype("Boolean")
+    {
+        set ThrustDir to angleAxis(0, ship:up:vector).
+    }
+    if HoverAltitude:isType("Boolean")
+    {
+        set HoverAltitude to max(ship:bounds:bottomaltradar, 50).
+    }
+    if HoverPosition:istype("Boolean")
+    {
+        set isPositionMode to HoverPosition.
+        set HoverPosition to ship:geoPosition.
+    }
+    else if HoverPosition:istype("GeoCoordinates")
+    {
+        set isPositionMode to true.
+    }
+    else
+    {
+        set isPositionMode to false.
+        print "typeof(HoverPosition) = " + HoverPosition:typename.
+    }
+    local sAltMode is
+        choose
+            "AGL"
+        if TerrainMode else
+            "ASL".
+    //Hover_Set_Position().
+    //set HoverAltitude to HoverAltitude + 50.
+    print "Initializing Altitude hold at " + round(HoverAltitude) + "m " + sAltMode.
+    print "   Position Mode: " + isPositionMode.
     set hasLanded to false.
     until hasLanded
     {
@@ -57,6 +109,39 @@ local function main
     }
 }
 
+function Hover_Set_DistHdg
+{
+    parameter Dist is 0, iHdg is -1.
+    local pos is (-1*ship:body:position).
+    local uNorth is NorthVectorAtPos(pos, ship:body).
+    local uEast is -vcrs(pos, uNorth):normalized.
+    if iHdg < 0
+    {
+        local vecHDG is vectorExclude(pos:normalized, ((SHIP:FACING) * ThrustDir):topvector).
+        set iHdg to 
+            choose
+                vAng(uNorth, -vecHDG)
+            if vecHDG * uEast >= 0 else
+                360 - vAng(uNorth, -vecHDG).
+    }
+    local nComp is cos(iHdg).
+    local eComp is sin(iHdg).
+    local degTgt is (Dist/pos:mag)*constant:RadToDeg.
+    return Hover_Set_Position(nComp*degTgt, eComp*degTgt, true).
+}
+
+function Hover_Set_Position
+{
+    parameter lat is ship:geoPosition:lat, lng is ship:geoPosition:lng, Relative is false.
+    if Relative
+    {
+        set lat to ship:geoPosition:lat + lat.
+        set lng to ship:geoPosition:lng + lng.
+    }
+    set HoverPosition to latlng(lat, lng).
+    set isPositionMode to true.
+}
+
 function Hover_Step
 {
     parameter ThrustDir is angleAxis(0, ship:up:vector), HoverAltitude is bnd:bottomaltradar.
@@ -71,8 +156,70 @@ function Hover_Step
         set bnd to ship:bounds.
         set last_bnd_update to time:seconds.
     }
+    Hover_CtrlHSpeed().
     Hover_CtrlPitch(ThrustDir).
     Hover_CtrlThrust(ThrustDir, HoverAltitude).
+}
+
+local function Hover_CtrlHSpeed
+{
+    if not isPositionMode 
+    {
+        set PositionArrow:show to false.
+        return.
+    }
+    if not PositionArrow:show 
+    {
+        print "Displaying postion target vector".
+        set PositionArrow:show to true.
+    }
+    local pos is (-1*ship:body:position).
+    local gAcc is (ship:body:mu/((pos:mag)^2)).
+    local gForce is gAcc*ship:mass.
+    local maxAng is min(30, arcCos(((currentVAcc + gAcc) * ship:mass)/ship:availablethrust)).
+    local uNorth is NorthVectorAtPos(pos, ship:body).
+    local uEast is vcrs(pos, uNorth):normalized.
+    local tgt is HoverPosition:position-ship:body:position.
+    local startVec is ship:geoPosition:position-ship:body:position.
+    local hMaxA is 
+        choose
+            (currentVAcc + gAcc)*sin(maxAng)
+        if not ((currentVAcc + gAcc) = 0) else
+            (-0.2 + gAcc)*sin(maxAng).
+    if TerrainMode
+    {
+        set tgt to tgt:normalized * (tgt:mag + HoverAltitude).
+        set startVec to startVec:normalized * (startVec:mag + HoverAltitude).
+    }
+    else
+    {
+        set tgt to tgt:normalized * (ship:body:radius + HoverAltitude).
+        set startVec to startVec:normalized * (ship:body:radius + HoverAltitude).
+    }
+    local pathVec is tgt - startVec.
+    set hdg to 
+        choose
+            vAng(uNorth, pathVec)
+        if pathVec * uEast >= 0 else
+            360 - vAng(uNorth, pathVec).
+    local dist is vAng(startVec, tgt)*constant:DegToRad*startVec:mag.
+    set hMaxA to max (0, hMaxA).
+    if 2*hMaxA*dist < 0
+    {
+        print "    2*hMaxA*dist = " + 2*hMaxA*dist.
+        print "        hMaxA = " + hMaxA.
+        print "        dist = " + dist.
+        until false.
+    }
+    set hSpeed to min(hSpeedLimit, dist/20).
+    if dist > 1
+    {
+        set PositionArrowColor to Red.
+    }
+    else
+    {
+        set PositionArrowColor to Green.
+    }
 }
 
 local function Hover_CtrlPitch
@@ -83,7 +230,18 @@ local function Hover_CtrlPitch
     local pos is (-1*ship:body:position).
     local gAcc is (ship:body:mu/((pos:mag)^2)).
     local gForce is gAcc*ship:mass.
-    local maxAng is min(30, arcCos(((currentVAcc + gAcc) * ship:mass)/ship:availablethrust)).
+    local ThrustVComp is ((currentVAcc + gAcc) * ship:mass)/ship:availablethrust.
+    if ABS(ThrustVComp) > 1
+    {
+        print "In Hover.ks:Hover_CtrlPitch():".
+        print "    ((currentVAcc + gAcc) * ship:mass)/ship:availablethrust = " + ThrustVComp.
+        print "        currentVAcc = " + currentVAcc.
+        print "        gAcc = " + gAcc.
+        print "        ship:mass = " + ship:mass.
+        print "        ship:availableThrust = " + ship:availablethrust.
+        set ThrustVComp to ThrustVComp/ABS(ThrustVComp).
+    }
+    local maxAng is min(30, arcCos(ThrustVComp)).
     local ThrustAng is vAng(ThrustVec:normalized, pos:normalized).
     local uNorth is NorthVectorAtPos(pos, ship:body).
     local uEast is -vcrs(pos, uNorth):normalized.
@@ -95,7 +253,7 @@ local function Hover_CtrlPitch
     }
     set aUp to min(aUp, ((ship:availablethrust*cos(ThrustAng))-gForce)/ship:mass).
 
-    if isLanding
+    if isLanding and not isPositionMode
     {
         set hSpeed to 0.
     }
@@ -112,7 +270,7 @@ local function Hover_CtrlPitch
     local truehdg is vectorExclude(pos:normalized,ThrustVec):normalized.
     local vecHDG is uNorth * angleAxis(hdg, pos:normalized).
     local hvel is vectorExclude(pos:normalized, ship:velocity:surface).
-    if (isLanding and (hvel:mag < 0.5))
+    if (isLanding and (hvel:mag < 0.1))
     {
         if not hNull
         {
@@ -137,7 +295,11 @@ local function Hover_CtrlPitch
         if not ((currentVAcc + gAcc) = 0) else
             (-0.2 + gAcc)*sin(maxAng).
     local hdv is vecHdg * hSpeed - hvel.
-    local hacc is min(hMaxA, hdv:mag/1.5). // allow 5s (?) of slew
+    local hacc is hMaxA.
+    if hdv:mag < (hMaxA * 10)/2 // 10s ramp down
+    {
+        set hacc to hMaxA * hdv:mag*((2)/(hMaxA * 10)).
+    }
     local pitchAng is 0.
     if not ((currentVAcc + gAcc < 0.1) or (hNull))
     {
@@ -331,8 +493,6 @@ local function Hover_ProcessInput
         set hasLanded to false.
         set checkLanded to false.
         set hNull to false.
-        set hSpeedLimit to 0.
-        set hSpeed to 0.
         gear on.
     }
 }
