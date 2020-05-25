@@ -26,6 +26,7 @@ local isPositionMode is false.
 local TerrainMode is true.
 
 local pidHVel is PIDLoop(0.5, 0.001, 0).
+local pidPosition is PIDLoop(0.2, 0, 0.005).
 
 local PositionArrowColor is red.
 local PositionArrow is 
@@ -213,7 +214,10 @@ local function Hover_CtrlHSpeed
         print "        dist = " + dist.
         until false.
     }
-    set hSpeed to min(hSpeedLimit, dist/20).
+    // set hSpeed to min(hSpeedLimit, dist/5).
+    set pidPosition:maxoutput to ABS(hSpeedLimit).
+    set pidPosition:minoutput to -ABS(hSpeedLimit).
+    set hSpeed to -pidPosition:update(time:seconds, dist).
     if dist > 1
     {
         set PositionArrowColor to Red.
@@ -302,8 +306,8 @@ local function Hover_CtrlPitch
     // {
     //     set hacc to hMaxA * hdv:mag*((2)/(hMaxA * 10)).
     // }
-    set pidHVel:maxoutput to hMaxA.
-    set pidHVel:minoutput to -hMaxA.
+    set pidHVel:maxoutput to ABS(hMaxA).
+    set pidHVel:minoutput to -ABS(hMaxA).
     set hacc to hMaxA * -pidHVel:Update(time:seconds, hdv:mag/hMaxA).
     local pitchAng is 0.
     if not ((currentVAcc + gAcc < 0.1) or (hNull))
@@ -377,6 +381,7 @@ local function Hover_CtrlThrust
             if bnd:bottomaltradar < 0.1 and hNull
             {
                 set hasLanded to true.
+                set PositionArrow:show to false.
             }
         }
     }
