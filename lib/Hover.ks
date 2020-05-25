@@ -27,6 +27,9 @@ local TerrainMode is true.
 local pidHVel is PIDLoop(0.5, 0.001, 0).
 local pidPosition is PIDLoop(0.2, 0, 0.005).
 
+local last_log_update_time is 0.
+local log_update_rate is 5.
+
 local PositionArrowColor is red.
 local PositionArrow is 
     VECDRAW(
@@ -92,18 +95,10 @@ local function main
     set hasLanded to false.
     until hasLanded
     {
-        set update to true.
         Hover_Step(ThrustDir, HoverAltitude).
-        set update to false.
-        local nextUpdate is time:seconds + 5.
-        until time:seconds > nextUpdate
+        until not terminal:input:haschar
         {
-            Hover_Step(ThrustDir, HoverAltitude).
-            until not terminal:input:haschar
-            {
-                Hover_ProcessInput(terminal:input:getchar).
-            }
-            if hasLanded break.
+            Hover_ProcessInput(terminal:input:getchar).
         }
     }
 }
@@ -139,11 +134,12 @@ function Hover_Set_Position
     }
     set HoverPosition to latlng(lat, lng).
     set isPositionMode to true.
+    LogMessage("Set target surface position to: " + HoverPosition:tostring).
 }
 
 function Hover_Step
 {
-    parameter ThrustDir is angleAxis(0, ship:up:vector), HoverAltitude is bnd:bottomaltradar.
+    parameter ThrustDir is ThrustDir, HoverAltitude is HoverAltitude.
     if ship:availablethrust = 0 return.
     local bnd_update_rate is
         choose
@@ -154,6 +150,15 @@ function Hover_Step
     {
         set bnd to ship:bounds.
         set last_bnd_update to time:seconds.
+    }
+    if time:seconds > last_log_update_time + log_update_rate
+    {
+        set update to true.
+        set last_log_update_time to time:seconds.
+    }
+    else
+    {
+        set update to false.
     }
     Hover_CtrlHSpeed().
     Hover_CtrlPitch(ThrustDir).
@@ -215,6 +220,7 @@ local function Hover_CtrlHSpeed
     {
         set PositionArrowColor to Green.
     }
+    if update LogMessage("Position Mode: Horizontal Distance " + round(dist,1) + "m, Horizontal Speed Setpoint " + round(hSpeed,1) + "m/s").
 }
 
 local function Hover_CtrlPitch
@@ -228,12 +234,14 @@ local function Hover_CtrlPitch
     local ThrustVComp is ((currentVAcc + gAcc) * ship:mass)/ship:availablethrust.
     if ABS(ThrustVComp) > 1
     {
-        print "In Hover.ks:Hover_CtrlPitch():".
-        print "    ((currentVAcc + gAcc) * ship:mass)/ship:availablethrust = " + ThrustVComp.
-        print "        currentVAcc = " + currentVAcc.
-        print "        gAcc = " + gAcc.
-        print "        ship:mass = " + ship:mass.
-        print "        ship:availableThrust = " + ship:availablethrust.
+        LogMessage(
+                "In Hover.ks:Hover_CtrlPitch():" + "\n" +
+                "    ((currentVAcc + gAcc) * ship:mass)/ship:availablethrust = " + ThrustVComp + "\n" +
+                "        currentVAcc = " + currentVAcc + "\n" +
+                "        gAcc = " + gAcc + "\n" +
+                "        ship:mass = " + ship:mass + "\n" +
+                "        ship:availableThrust = " + ship:availablethrust
+            ).
         set ThrustVComp to ThrustVComp/ABS(ThrustVComp).
     }
     local maxAng is min(30, arcCos(ThrustVComp)).
@@ -260,7 +268,7 @@ local function Hover_CtrlPitch
                 vAng(uNorth, -vecHDG)
             if vecHDG * uEast >= 0 else
                 360 - vAng(uNorth, -vecHDG).
-        print "Heading set to: " + hdg.
+        LogMessage("Heading set to: " + hdg).
     }
     local truehdg is vectorExclude(pos:normalized,ThrustVec):normalized.
     local vecHDG is uNorth * angleAxis(hdg, pos:normalized).
@@ -269,7 +277,7 @@ local function Hover_CtrlPitch
     {
         if not hNull
         {
-            print "Beginning Final descent...".
+            LogMessage("Beginning Final descent...").
             set HoverAltitude to MIN(bnd:bottomaltradar - 2, 5).
         }
         set hNull to true.
@@ -301,6 +309,16 @@ local function Hover_CtrlPitch
     local pitchVec is pos:normalized * angleAxis(pitchAng, vCrs(pos:normalized, hdv:normalized)).
     set currentHAcc to hacc.
     lock steering to lookDirUp(pitchVec, -vecHDG).
+    if update LogMessage("Pitch Control: " +
+            "Pitch " + round(pitchAng,1) + " degress " +
+            "Toward Hdg " + round(
+                (choose
+                    vAng(uNorth, -hdv:normalized)
+                if hdv:normalized * uEast >= 0 else
+                    360 - vAng(uNorth, -hdv:normalized)) 
+            , 1) + " degress " +
+            "for Horizontal Acceleration " + round(hacc,1) + " m/s^2"
+        ).
 }
 
 local function Hover_CtrlThrust
@@ -351,6 +369,7 @@ local function Hover_CtrlThrust
         }
         else
         {
+            if update LogMessage("Hovering near target Altitude...").
         }
         set vAcc to (vSpeedTarget - (vSpeed))/1.5.
 
@@ -369,6 +388,7 @@ local function Hover_CtrlThrust
         {
             set state to "Slow Ascent".
             set vAcc to -((ABS(vSpeed)-1)^2)/(2*(bnd:bottomaltradar - HoverAltitude - 2)).
+            if update LogMessage("Slowing ascent at " + vSpeed + "m/s (" + vAcc + "m/s^2)...").
         }
         else
         {
@@ -378,6 +398,7 @@ local function Hover_CtrlThrust
                     min(aUp, (vSpeedLimit[1] - vSpeed)/2)
                 if not (vSpeedLimit[1] = 0) else
                     aUp.
+            if update LogMessage("Max ascent at " + vSpeed + "m/s (" + vAcc + "m/s^2)...").
         }
     }
     else if bnd:bottomaltradar > HoverAltitude
@@ -386,6 +407,7 @@ local function Hover_CtrlThrust
         {
             set state to "Slow Descent".
             set vAcc to ((ABS(vSpeed)-1)^2)/(2*(bnd:bottomaltradar - HoverAltitude + 2)).
+            if update LogMessage("Slowing descent at " + vSpeed + "m/s (" + vAcc + "m/s^2)...").
         }
         else
         {
@@ -395,6 +417,7 @@ local function Hover_CtrlThrust
                     MAX(aDown, ((vSpeedLimit[0] - vSpeed))/1.5)
                 if not (vSpeedLimit[0] = 0) else
                     aDown.
+            if update LogMessage("Max descent at " + vSpeed + "m/s (" + vAcc + "m/s^2)...").
         }
     }
     if ((currentHAcc > 0.1) or (ThrustAng > 0.1)) and vAcc <= -(gForce/ship:mass)
@@ -408,9 +431,16 @@ local function Hover_CtrlThrust
     set currentVAcc to vAcc.
     if myThrust/ship:availablethrust > 0.5
     {
+        LogMessage("Thrust of " + round((myThrust/ship:availablethrust)*100, 1) + "% " +
         "(VertA:" + round(vAcc,1) + "m/s2@" + round(ThrustAng) + "*, HA:" + round(HoverAltitude) + ") " +
-        "in state: " + state.
+        "in state: " + state).
     }
+    if update LogMessage("Throttle Control: " +
+            "Throttle at " + round((myThrust/ship:availablethrust)*100,1) + "% " +
+            "for Thrust " + round(myThrust, 1) + " kN " +
+            "for Vertical Acceleration " + round(vAcc,1) + " m/s^2 " +
+            "(Horizontal Acceleration " + round((tan(ThrustAng)*myThrust)/ship:mass,1) + " m/s^2)"
+        ).
 }
 
 local function Hover_ProcessInput
@@ -481,6 +511,93 @@ local function Hover_ProcessInput
         set checkLanded to false.
         set hNull to false.
         gear on.
+    }
+}
+
+local Hover_LoggingFunction is def_Hover_LoggingFunction@.
+
+function Hover_Set_LoggingFunction
+{
+    parameter LoggingFunction is false.
+    if not LoggingFunction:istype("KOSDelegate")
+    {
+        set LoggingFunction to def_Hover_LoggingFunction@.
+    }
+    if LoggingFunction:istype("KOSDelegate")
+    {
+        set Hover_LoggingFunction to LoggingFunction.
+    }
+}
+
+local function def_Hover_LoggingFunction
+{
+    parameter message is "".
+    if not exists("1:/log")
+    {
+        createDir("1:/log").
+    }
+    if not exists("1:/log/hover.log")
+    {
+        create("1:/log/hover.log").
+    }
+    log message to "1:/log/hover.log".
+}
+
+local function LogMessage
+{
+    parameter message is "".
+    local met is missionTime.
+    local hpd is KUniverse:HOURSPERDAY.
+    local dpy is 426.
+    if hpd <> 6
+    {
+        set dpy to 356.
+    }
+    local iY is Floor(met/(dpy*hpd*60*60)).
+    local iD is Floor(mod(met, dpy*hpd*60*60)/(hpd*60*60)).
+    local iH is Floor(mod(met, hpd*60*60)/(60*60)).
+    local iM is Floor(mod(met, 60*60)/(60)).
+    local iS is Floor(mod(met, 60)).
+    local iN is Floor(mod(met * 1000, 1000)).
+    local sTime is "".
+    if iY >= 1
+    {
+        set sTime to "Y" + iY:tostring + "-".
+    }
+    if iD >= 1 or iY >= 1
+    {
+        set sTime to sTime + "D" + iY:tostring + "-".
+    }
+    set sTime to sTime +
+        (choose
+            "0"
+        if iH < 10 else "") +
+        iH:tostring + ":" + 
+        (choose
+            "0"
+        if iM < 10 else "") +
+        iM:tostring + ":" + 
+        (choose
+            "0"
+        if iS < 10 else "") +
+        iS:tostring + "." + 
+        (choose
+            "0"
+        if iN < 100 else "") +
+        (choose
+            "0"
+        if iN < 10 else "") +
+        iN:tostring.
+    local pad is "".
+    until pad:length >= sTime:length + 2
+    {
+        set pad to pad + " ".
+    }
+    set message to "T+" + sTime + ": " +
+        message:replace("\n", char(10)):replace(char(10), char(10) + pad).
+    if Hover_LoggingFunction:istype("KOSDelegate")
+    {
+        Hover_LoggingFunction(message).
     }
 }
 
