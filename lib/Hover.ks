@@ -450,6 +450,7 @@ local function Hover_ProcessInput
         {
             set hdg to 360 + hdg.
         }
+        set isPositionMode to false.
     }
     if c = "d" or c = "e"
     {
@@ -459,16 +460,19 @@ local function Hover_ProcessInput
         {
             set hdg to hdg - 360.
         }
+        set isPositionMode to false.
     }
     if c = "s"
     {
         print "HSPEED--".
         set hSpeed to max(0, hSpeed - 1).
+        set isPositionMode to false.
     }
     if c = "w"
     {
         print "HSPEED++".
         set hSpeed to hSpeed + 1.
+        set isPositionMode to false.
     }
     if c = "-" or unchar(c) = 57352
     {
