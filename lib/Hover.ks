@@ -1,7 +1,7 @@
 @lazyGlobal off.
 
 parameter 
-    HoverAltitude is max(ship:bounds:bottomaltradar, 50),
+    HoverAltitude is true,
     TerrainMode is true,
     HoverPosition is false,
     ThrustDir is angleAxis(0, ship:up:vector).
@@ -69,7 +69,14 @@ local function main
     }
     if HoverAltitude:isType("Boolean")
     {
-        set HoverAltitude to max(ship:bounds:bottomaltradar, 50).
+        if TerrainMode
+        {
+            set HoverAltitude to max(ship:bounds:bottomaltradar, 50).
+        }
+        else
+        {
+            set HoverAltitude to max(ship:altitude, ship:geoPosition:TERRAINHEIGHT + 50).
+        }
     }
     if HoverPosition:istype("Boolean")
     {
