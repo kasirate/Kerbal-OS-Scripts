@@ -30,7 +30,7 @@ local pidPosition is PIDLoop(0.2, 0, 0.005).
 local last_log_update_time is 0.
 local log_update_rate is 5.
 
-local PositionArrowColor is red.
+local PositionArrowColor is Blue.
 local PositionArrow is 
     VECDRAW(
         ship:position, 
@@ -45,7 +45,7 @@ local PositionArrow is
         "", 
         1.0, 
         false, 
-        0.2, 
+        1.0, 
         true
     ).
 
@@ -266,7 +266,7 @@ local function Hover_CtrlHSpeed
     set PositionDistance to dist.
     if dist > 1
     {
-        set PositionArrowColor to Red.
+        set PositionArrowColor to Blue.
     }
     else
     {
