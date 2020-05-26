@@ -1,9 +1,10 @@
 @lazyGlobal off.
 
 parameter 
-    ThrustDir is angleAxis(0, ship:up:vector), 
     HoverAltitude is max(ship:bounds:bottomaltradar, 50),
-    HoverPosition is false.
+    TerrainMode is true,
+    HoverPosition is false,
+    ThrustDir is angleAxis(0, ship:up:vector).
 
 local vSpeedLimit is list(0,0).
 local aLimit is list(0,0).
@@ -22,7 +23,6 @@ local last_bnd_update is time:seconds.
 local hNull is false.
 local isPositionMode is false.
 local PositionDistance is 0.
-local TerrainMode is true.
 
 local pidHVel is PIDLoop(0.5, 0.001, 0).
 local pidPosition is PIDLoop(0.2, 0, 0.005).
@@ -95,7 +95,7 @@ local function main
     set hasLanded to false.
     until hasLanded
     {
-        Hover_Step(ThrustDir, HoverAltitude).
+        Hover_Step().
         until not terminal:input:haschar
         {
             Hover_ProcessInput(terminal:input:getchar).
@@ -137,9 +137,50 @@ function Hover_Set_Position
     LogMessage("Set target surface position to: " + HoverPosition:tostring).
 }
 
+function Hover_Set_TerrainMode
+{
+    parameter Mode is not TerrainMode.
+    if not (Mode = TerrainMode)
+    {
+        set TerrainMode to Mode.
+        if Mode
+        {
+            set HoverAltitude to HoverAltitude - ship:geoPosition:TERRAINHEIGHT.
+        }
+        else
+        {
+            set HoverAltitude to HoverAltitude + ship:geoPosition:TERRAINHEIGHT.
+        }
+    }
+}
+
+function Hover_Set_Altitude
+{
+    parameter iAlt is Hover_GetAltitude().
+    set HoverAltitude to iAlt.
+}
+
+function Hover_Set_ThrustDir
+{
+    parameter dirThrust is angleAxis(0, ship:up:vector).
+    set ThrustDir to dirThrust.
+}
+
+function Hover_Set_HSpeedLimit
+{
+    parameter iHSpeedLimit is hSpeedLimit.
+    set hSpeedLimit to iHSpeedLimit.
+}
+
+function Hover_Set_SpeedHdg
+{
+    parameter iSpeed is hspeed, iHdg is hdg.
+    set hSpeed to iSpeed.
+    set hdg to iHdg.
+}
+
 function Hover_Step
 {
-    parameter ThrustDir is ThrustDir, HoverAltitude is HoverAltitude.
     if ship:availablethrust = 0 return.
     local bnd_update_rate is
         choose
@@ -161,8 +202,20 @@ function Hover_Step
         set update to false.
     }
     Hover_CtrlHSpeed().
-    Hover_CtrlPitch(ThrustDir).
-    Hover_CtrlThrust(ThrustDir, HoverAltitude).
+    Hover_CtrlPitch().
+    Hover_CtrlThrust().
+}
+
+local function Hover_GetAltitude
+{
+    if TerrainMode
+    {
+        return bnd:bottomaltradar.
+    }
+    else
+    {
+        return ship:altitude.
+    }
 }
 
 local function Hover_CtrlHSpeed
@@ -179,7 +232,6 @@ local function Hover_CtrlHSpeed
     }
     local pos is (-1*ship:body:position).
     local gAcc is (ship:body:mu/((pos:mag)^2)).
-    local gForce is gAcc*ship:mass.
     local maxAng is min(30, arcCos(((currentVAcc + gAcc) * ship:mass)/ship:availablethrust)).
     local uNorth is NorthVectorAtPos(pos, ship:body).
     local uEast is vcrs(pos, uNorth):normalized.
@@ -225,7 +277,6 @@ local function Hover_CtrlHSpeed
 
 local function Hover_CtrlPitch
 {
-    parameter ThrustDir is angleAxis(0, ship:up:vector).
     if ship:availablethrust = 0 return.
     local ThrustVec is (SHIP:FACING:FOREVECTOR) * ThrustDir.
     local pos is (-1*ship:body:position).
@@ -270,7 +321,6 @@ local function Hover_CtrlPitch
                 360 - vAng(uNorth, -vecHDG).
         LogMessage("Heading set to: " + hdg).
     }
-    local truehdg is vectorExclude(pos:normalized,ThrustVec):normalized.
     local vecHDG is uNorth * angleAxis(hdg, pos:normalized).
     local hvel is vectorExclude(pos:normalized, ship:velocity:surface).
     if (isLanding and (hvel:mag < 0.1) and ((not isPositionMode) or (PositionDistance < 1)))
@@ -278,7 +328,8 @@ local function Hover_CtrlPitch
         if not hNull
         {
             LogMessage("Beginning Final descent...").
-            set HoverAltitude to MIN(bnd:bottomaltradar - 2, 5).
+            Hover_Set_TerrainMode(true).
+            set HoverAltitude to MIN(Hover_GetAltitude() - 2, 5).
         }
         set hNull to true.
     }
@@ -323,8 +374,6 @@ local function Hover_CtrlPitch
 
 local function Hover_CtrlThrust
 {
-    parameter ThrustDir is angleAxis(0, ship:up:vector), HoverAltitude is bnd:bottomaltradar.
-    
     if ship:availablethrust = 0 return.
     local ThrustVec is (SHIP:FACING:FOREVECTOR) * ThrustDir.
     local pos is (-1*ship:body:position).
@@ -354,17 +403,17 @@ local function Hover_CtrlThrust
             ABS(vSpeed/aDown)
         if vSpeed > 0 else
             ABS(vSpeed/aUp).
-    if (ABS(HoverAltitude - bnd:bottomaltradar) < 5) and (ABS(vSpeed) < 2)
+    if (ABS(HoverAltitude - Hover_GetAltitude()) < 5) and (ABS(vSpeed) < 2)
     {
-        local vSpeedTarget is ((bnd:bottomaltradar - HoverAltitude)/5)^2.
-        if bnd:bottomaltradar > HoverAltitude
+        local vSpeedTarget is ((Hover_GetAltitude() - HoverAltitude)/5)^2.
+        if Hover_GetAltitude() > HoverAltitude
         {
             set vSpeedTarget to -ABS(vSpeedTarget).
         }
         if isLanding and hNull and (vSpeed < 0.1) and (vSpeed > -ABS(TouchDownSpeed))
         {
             set vSpeedTarget to -ABS(TouchDownSpeed).
-            set HoverAltitude to MIN(bnd:bottomaltradar - 2, 5).
+            set HoverAltitude to MIN(Hover_GetAltitude() - 2, 5).
             set state to "Final Descent".
         }
         else
@@ -375,19 +424,19 @@ local function Hover_CtrlThrust
 
         if isLanding
         {
-            if bnd:bottomaltradar < 0.1 and hNull
+            if Hover_GetAltitude() < 0.1 and hNull
             {
                 set hasLanded to true.
                 set PositionArrow:show to false.
             }
         }
     }
-    else if bnd:bottomaltradar < HoverAltitude
+    else if Hover_GetAltitude() < HoverAltitude
     {
-        if (HoverAltitude - bnd:bottomaltradar)/ABS(vSpeed) <= decelTime and vSpeed > 0
+        if (HoverAltitude - Hover_GetAltitude())/ABS(vSpeed) <= decelTime and vSpeed > 0
         {
             set state to "Slow Ascent".
-            set vAcc to -((ABS(vSpeed)-1)^2)/(2*(bnd:bottomaltradar - HoverAltitude - 2)).
+            set vAcc to -((ABS(vSpeed)-1)^2)/(2*(Hover_GetAltitude() - HoverAltitude - 2)).
             if update LogMessage("Slowing ascent at " + vSpeed + "m/s (" + vAcc + "m/s^2)...").
         }
         else
@@ -401,12 +450,12 @@ local function Hover_CtrlThrust
             if update LogMessage("Max ascent at " + vSpeed + "m/s (" + vAcc + "m/s^2)...").
         }
     }
-    else if bnd:bottomaltradar > HoverAltitude
+    else if Hover_GetAltitude() > HoverAltitude
     {
-        if (bnd:bottomaltradar - HoverAltitude)/ABS(vSpeed) <= decelTime and vSpeed < 0
+        if (Hover_GetAltitude() - HoverAltitude)/ABS(vSpeed) <= decelTime and vSpeed < 0
         {
             set state to "Slow Descent".
-            set vAcc to ((ABS(vSpeed)-1)^2)/(2*(bnd:bottomaltradar - HoverAltitude + 2)).
+            set vAcc to ((ABS(vSpeed)-1)^2)/(2*(Hover_GetAltitude() - HoverAltitude + 2)).
             if update LogMessage("Slowing descent at " + vSpeed + "m/s (" + vAcc + "m/s^2)...").
         }
         else
@@ -457,6 +506,7 @@ local function Hover_ProcessInput
             set hdg to 360 + hdg.
         }
         set isPositionMode to false.
+        set isLanding to false.
     }
     if c = "d" or c = "e"
     {
@@ -467,36 +517,41 @@ local function Hover_ProcessInput
             set hdg to hdg - 360.
         }
         set isPositionMode to false.
+        set isLanding to false.
     }
     if c = "s"
     {
         print "HSPEED--".
         set hSpeed to max(0, hSpeed - 1).
         set isPositionMode to false.
+        set isLanding to false.
     }
     if c = "w"
     {
         print "HSPEED++".
         set hSpeed to hSpeed + 1.
         set isPositionMode to false.
+        set isLanding to false.
     }
     if c = "-" or unchar(c) = 57352
     {
         print "ALT--".
-        if HoverAltitude > bnd:bottomaltradar
+        if HoverAltitude > Hover_GetAltitude()
         {
-            set HoverAltitude to bnd:bottomaltradar.
+            set HoverAltitude to Hover_GetAltitude().
         }
         set HoverAltitude to HoverAltitude - 1.
+        set isLanding to false.
     }
     if c = "+" or c = "=" or unchar(c) = 57351
     {
         print "ALT++".
-        if HoverAltitude < bnd:bottomaltradar
+        if HoverAltitude < Hover_GetAltitude()
         {
-            set HoverAltitude to bnd:bottomaltradar.
+            set HoverAltitude to Hover_GetAltitude().
         }
         set HoverAltitude to HoverAltitude + 1.
+        set isLanding to false.
     }
     if c = "p"
     {
@@ -508,7 +563,6 @@ local function Hover_ProcessInput
         print "Landing".
         set isLanding to true.
         set hasLanded to false.
-        set checkLanded to false.
         set hNull to false.
         gear on.
     }
