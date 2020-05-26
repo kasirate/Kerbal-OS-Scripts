@@ -18,6 +18,8 @@ local TouchDownSpeed is -0.5.
 local currentVAcc is 0.
 local currentHAcc is 0.
 local hasLanded is false.
+local atAltitude is false.
+local inFinalDescent is false.
 local bnd is ship:bounds.
 local last_bnd_update is time:seconds.
 local hNull is false.
@@ -184,6 +186,46 @@ function Hover_Set_SpeedHdg
     parameter iSpeed is hspeed, iHdg is hdg.
     set hSpeed to iSpeed.
     set hdg to iHdg.
+}
+
+function Hover_State_hasLanded
+{
+    return hasLanded.
+}
+
+function Hover_State_isLanding
+{
+    return isLanding.
+}
+
+function Hover_Set_Landing
+{
+    parameter v is not isLanding.
+    set isLanding to v.
+}
+
+function Hover_Get_PositionDistance
+{
+    if not isPositionMode return -1.
+    return PositionDistance.
+}
+
+function Hover_State_atPosition
+{
+    if not isPositionMode return false.
+    local pos is (-1*ship:body:position).
+    local hvel is vectorExclude(pos:normalized, ship:velocity:surface).
+    return ((PositionDistance < 1) and (hvel:mag < 0.5)).
+}
+
+function Hover_State_atAltitude
+{
+    return atAltitude.
+}
+
+function Hover_State_inFinalDescent
+{
+    return inFinalDescent.
 }
 
 function Hover_Step
@@ -410,6 +452,8 @@ local function Hover_CtrlThrust
             ABS(vSpeed/aDown)
         if vSpeed > 0 else
             ABS(vSpeed/aUp).
+    set atAltitude to false.
+    set inFinalDescent to false.
     if (ABS(HoverAltitude - Hover_GetAltitude()) < 5) and (ABS(vSpeed) < 2)
     {
         local vSpeedTarget is ((Hover_GetAltitude() - HoverAltitude)/5)^2.
@@ -422,9 +466,11 @@ local function Hover_CtrlThrust
             set vSpeedTarget to -ABS(TouchDownSpeed).
             set HoverAltitude to MIN(Hover_GetAltitude() - 2, 5).
             set state to "Final Descent".
+            set inFinalDescent to true.
         }
         else
         {
+            set atAltitude to true.
             if update LogMessage("Hovering near target Altitude...").
         }
         set vAcc to (vSpeedTarget - (vSpeed))/1.5.
