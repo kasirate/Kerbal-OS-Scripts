@@ -6,6 +6,10 @@ boot/*
 boot
 loaders/*
 loaders
+log/*
+log
+logs/*
+logs
 
 #ignore VS Code files
 .vscode/*
