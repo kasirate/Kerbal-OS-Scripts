@@ -9,7 +9,6 @@ function ExecuteNode
 {
     parameter mnv is nextNode, AutoWarp is true, AutoStage is true, AutoLVDiscard is false.
 
-    SAS ON.
     set warpmode to "rails".
 
     local myThrottle is 0.
@@ -41,7 +40,8 @@ function ExecuteNode
     // wait until aligned
     lock steering to lookDirUp(mnv:burnvector, ship:facing:topvector).
     print "aligning with maneuver node...".
-    until ship:angularVel:mag < (3.14159/180)/10 or time:seconds > start_time
+    wait 1.
+    until ship:angularVel:mag < 0.1 or time:seconds > start_time
     {
 
     }
@@ -69,15 +69,22 @@ function ExecuteNode
 
     print "executing burn...".
     local acc is ship:availableThrust/ship:mass.
-    until mnv:deltaV:mag < 0.1
+    until mnv:deltaV:mag < 0.5
     {
         set acc to ship:availableThrust/ship:mass.
         if (acc > 0)
         {
-            set myThrottle to 
-                max(0, min(1, 
-                    ((mnv:deltaV:mag/acc)/2) * ((ship:facing:vector:normalized * mnv:deltav:normalized)^2)
-                )).
+            if ship:facing:vector:normalized * mnv:deltav:normalized > 0
+            {
+                set myThrottle to 
+                    max(0, min(1, 
+                        ((mnv:deltaV:mag/acc)/2) * ((ship:facing:vector:normalized * mnv:deltav:normalized)^2)
+                    )).
+            }
+            else
+            {
+                set myThrottle to 0.
+            }
         }
         
         if AutoStage
@@ -710,7 +717,7 @@ local cbWarningMessage is def_WarningCallback@.
 function Nodes_Set_WarningCallback
 {
     parameter Callback.
-    if Callback:istype("KOSDelegate")
+    if Callback:istype("UserDelegate")
     {
         set cbWarningMessage to Callback.
     }
@@ -719,7 +726,7 @@ function Nodes_Set_WarningCallback
 local function WarningMessage
 {
     parameter message.
-    if cbWarningMessage:istype("KOSDelegate")
+    if cbWarningMessage:istype("UserDelegate")
     {
         if not cbWarningMessage:isdead
         {

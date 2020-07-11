@@ -65,6 +65,27 @@ if exists("ProgramLoader")
 
 local function main 
 {
+    FixParams().
+    local sAltMode is
+        choose
+            "AGL"
+        if TerrainMode else
+            "ASL".
+    print "Initializing Altitude hold at " + round(HoverAltitude) + "m " + sAltMode.
+    print "   Position Mode: " + isPositionMode.
+    set hasLanded to false.
+    until hasLanded
+    {
+        Hover_Step().
+        until not terminal:input:haschar
+        {
+            Hover_ProcessInput(terminal:input:getchar).
+        }
+    }
+}
+
+local function FixParams
+{
     if ThrustDir:istype("Boolean")
     {
         set ThrustDir to angleAxis(0, ship:up:vector).
@@ -83,7 +104,10 @@ local function main
     if HoverPosition:istype("Boolean")
     {
         set isPositionMode to HoverPosition.
-        set HoverPosition to ship:geoPosition.
+        if isPositionMode
+        {
+            set HoverPosition to ship:geoPosition.
+        }
     }
     else if HoverPosition:istype("GeoCoordinates")
     {
@@ -93,22 +117,6 @@ local function main
     {
         set isPositionMode to false.
         print "typeof(HoverPosition) = " + HoverPosition:typename.
-    }
-    local sAltMode is
-        choose
-            "AGL"
-        if TerrainMode else
-            "ASL".
-    print "Initializing Altitude hold at " + round(HoverAltitude) + "m " + sAltMode.
-    print "   Position Mode: " + isPositionMode.
-    set hasLanded to false.
-    until hasLanded
-    {
-        Hover_Step().
-        until not terminal:input:haschar
-        {
-            Hover_ProcessInput(terminal:input:getchar).
-        }
     }
 }
 
@@ -231,6 +239,7 @@ function Hover_State_inFinalDescent
 function Hover_Step
 {
     if ship:availablethrust = 0 return.
+    FixParams().
     local bnd_update_rate is
         choose
             1
@@ -449,9 +458,9 @@ local function Hover_CtrlThrust
     local vSpeed is ship:velocity:surface * pos:normalized.
     local decelTime is 
         choose
-            ABS(vSpeed/aDown)
+            ABS(2*vSpeed/aDown)
         if vSpeed > 0 else
-            ABS(vSpeed/aUp).
+            ABS(2*vSpeed/aUp).
     set atAltitude to false.
     set inFinalDescent to false.
     if (ABS(HoverAltitude - Hover_GetAltitude()) < 5) and (ABS(vSpeed) < 2)
@@ -464,6 +473,7 @@ local function Hover_CtrlThrust
         if isLanding and hNull and (vSpeed < 0.1) and (vSpeed > -ABS(TouchDownSpeed))
         {
             set vSpeedTarget to -ABS(TouchDownSpeed).
+            Hover_Set_TerrainMode(true).
             set HoverAltitude to MIN(Hover_GetAltitude() - 2, 5).
             set state to "Final Descent".
             set inFinalDescent to true.
@@ -486,30 +496,53 @@ local function Hover_CtrlThrust
     }
     else if Hover_GetAltitude() < HoverAltitude
     {
-        if (HoverAltitude - Hover_GetAltitude())/ABS(vSpeed) <= decelTime and vSpeed > 0
+        if (vSpeed > 0) and  (Hover_GetAltitude() >= HoverAltitude - (vSpeed * decelTime) - ((aDown * (decelTime^2))/3))
         {
             set state to "Slow Ascent".
-            set vAcc to -((ABS(vSpeed)-1)^2)/(2*(Hover_GetAltitude() - HoverAltitude - 2)).
+            set vAcc to 
+                choose
+                    -3*(-(HoverAltitude - Hover_GetAltitude())+decelTime*vSpeed+HoverAltitude)/(decelTime^2)
+                if not (decelTime <= 0) else
+                    0.
             if update LogMessage("Slowing ascent at " + vSpeed + "m/s (" + vAcc + "m/s^2)...").
+        }
+        else if vSpeed < 0
+        {
+            set state to "Reverse Descent".
+            set vAcc to aUp.
+            if update LogMessage("Reversing Descent at " + vSpeed + "m/s (" + vAcc + "m/s^2)...").
         }
         else
         {
             set state to "Max Ascent".
             set vAcc to 
                 choose
-                    min(aUp, (vSpeedLimit[1] - vSpeed)/2)
-                if not (vSpeedLimit[1] = 0) else
-                    aUp.
+                    (choose
+                        min(aUp, (vSpeedLimit[1] - vSpeed)/2)
+                    if not (vSpeedLimit[1] = 0) else
+                        aUp)
+                if 1 >= (vSpeed^2) + 2*aDown*(HoverAltitude - Hover_GetAltitude() - 2) else
+                    aDown.
             if update LogMessage("Max ascent at " + vSpeed + "m/s (" + vAcc + "m/s^2)...").
         }
     }
     else if Hover_GetAltitude() > HoverAltitude
     {
-        if (Hover_GetAltitude() - HoverAltitude)/ABS(vSpeed) <= decelTime and vSpeed < 0
+        if (vSpeed < 0) and (Hover_GetAltitude() <= HoverAltitude - (vSpeed * decelTime) - ((aUp * (decelTime^2))/3))
         {
             set state to "Slow Descent".
-            set vAcc to ((ABS(vSpeed)-1)^2)/(2*(Hover_GetAltitude() - HoverAltitude + 2)).
+            set vAcc to 
+                choose
+                    -3*(-(HoverAltitude - Hover_GetAltitude())+decelTime*vSpeed+HoverAltitude)/(decelTime^2)
+                if not (decelTime <= 0) else
+                    0.
             if update LogMessage("Slowing descent at " + vSpeed + "m/s (" + vAcc + "m/s^2)...").
+        }
+        else if vSpeed > 0
+        {
+            set state to "Reverse Ascent".
+            set vAcc to aDown.
+            if update LogMessage("Reversing Ascent at " + vSpeed + "m/s (" + vAcc + "m/s^2)...").
         }
         else
         {
@@ -531,16 +564,24 @@ local function Hover_CtrlThrust
     local myThrust is (gForce + (vAcc*ship:mass))/cos(ThrustAng).
     lock throttle to myThrust/ship:availablethrust.
     set currentVAcc to vAcc.
-    if myThrust/ship:availablethrust > 0.5
+    if myThrust/ship:availablethrust > 0.5 or myThrust = 0
     {
         LogMessage("Thrust of " + round((myThrust/ship:availablethrust)*100, 1) + "% " +
-        "(VertA:" + round(vAcc,1) + "m/s2@" + round(ThrustAng) + "*, HA:" + round(HoverAltitude) + ") " +
+        "(" + 
+        "VertA:" + round(vAcc,1) + "m/s^2@" + round(ThrustAng) + "*, " +
+        "VertV:" + round(vSpeed,1) + "m/s@, " +
+        "HoverAlt:" + round(HoverAltitude) + "m " + (choose "AGL" if TerrainMode else "MSL") + ", " +
+        "Alt:" + round(Hover_GetAltitude()) + "m " + (choose "AGL" if TerrainMode else "MSL") +
+        ") " +
+        "{DecelT: " + decelTime + " s} "+
         "in state: " + state).
     }
     if update LogMessage("Throttle Control: " +
             "Throttle at " + round((myThrust/ship:availablethrust)*100,1) + "% " +
             "for Thrust " + round(myThrust, 1) + " kN " +
             "for Vertical Acceleration " + round(vAcc,1) + " m/s^2 " +
+            "@ Vertical Velocity " + round(vSpeed,1) + " m/s " +
+            "in state: " + state + " " +
             "(Horizontal Acceleration " + round((tan(ThrustAng)*myThrust)/ship:mass,1) + " m/s^2)"
         ).
 }
@@ -626,11 +667,11 @@ local Hover_LoggingFunction is def_Hover_LoggingFunction@.
 function Hover_Set_LoggingFunction
 {
     parameter LoggingFunction is false.
-    if not LoggingFunction:istype("KOSDelegate")
+    if not LoggingFunction:istype("UserDelegate")
     {
         set LoggingFunction to def_Hover_LoggingFunction@.
     }
-    if LoggingFunction:istype("KOSDelegate")
+    if LoggingFunction:istype("UserDelegate")
     {
         set Hover_LoggingFunction to LoggingFunction.
     }
@@ -702,7 +743,7 @@ local function LogMessage
     }
     set message to "T+" + sTime + ": " +
         message:replace("\n", char(10)):replace(char(10), char(10) + pad).
-    if Hover_LoggingFunction:istype("KOSDelegate")
+    if Hover_LoggingFunction:istype("UserDelegate")
     {
         Hover_LoggingFunction(message).
     }
